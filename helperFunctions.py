@@ -117,3 +117,15 @@ def get_column_values(train_dataset, column):
         # if len(values) >= 10:
         #     break
     return values
+
+
+def extract_columns_and_dtypes(spec, parent_key=''):
+    columns = []
+    for key, value in spec.items():
+        full_key = f"{parent_key}.{key}" if parent_key else key
+        if isinstance(value, dict):
+            columns.extend(extract_columns_and_dtypes(
+                value, parent_key=full_key))
+        else:
+            columns.append((full_key, value.dtype))
+    return columns
