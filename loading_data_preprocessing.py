@@ -46,9 +46,10 @@ def load_financial_data():
       data which is downloaded from Kaggle Hub.
     """
     # Download latest version
-    # path = kagglehub.dataset_download(
-    # "computingvictor/transactions-fraud-datasets")
-    path = "../datasets/FinancialData/"
+    path = kagglehub.dataset_download(
+        "computingvictor/transactions-fraud-datasets"
+    )
+
     print("Path to dataset files:", path)
 
     output_path = "data.csv"
@@ -81,15 +82,33 @@ def load_financial_data():
     first_chunk = True
 
     for chunk in transactions_chunks:
-        # chunk = pd.merge(chunk, mcc_codes, on='mcc', how='left')
         chunk = pd.merge(chunk, train_fraud_labels, on='id', how='left')
         chunk = chunk[chunk['label'].notna()]
-        chunk = pd.merge(chunk, cards_data, on=[
-            'client_id', 'card_id'], how='left')
+        fraud_rows = chunk[chunk['label'] == "Yes"]
+        nonfraud_rows = chunk[chunk['label'] == "No"]
+        nonfraud_sample = nonfraud_rows.sample(
+            n=min(len(nonfraud_rows),
+                  len(fraud_rows) * 10
+                  ),
+            random_state=42
+        )
+        chunk = pd.concat([fraud_rows, nonfraud_sample]
+                          ).sample(frac=1, random_state=42)
+        chunk = pd.merge(
+            chunk,
+            cards_data,
+            on=['client_id', 'card_id'],
+            how='left'
+        )
         chunk = pd.merge(chunk, users_data, on='client_id', how='left')
         mode = 'w' if first_chunk else 'a'
-        chunk.to_csv("data.csv", mode=mode,
-                     header=first_chunk, index=False)
+        chunk.to_csv(
+            "data.csv",
+            mode=mode,
+            header=first_chunk,
+            index=False
+        )
+
         first_chunk = False  # Set the flag to False after the first write.
 
     print(f"All data successfully merged and saved to {output_path}.")
@@ -110,10 +129,10 @@ dataset = tf.data.experimental.make_csv_dataset(
     # shuffle_buffer_size=415809
 )
 
-df = pd.read_csv(csv_file)
-print("Number of rows:", len(df))
+# df = pd.read_csv(csv_file)
+# print("Number of rows:", len(df))
 
-dataset_size = len(df)
+dataset_size = 100000
 
 # Define your desired split ratios
 train_ratio = 0.8
@@ -130,12 +149,6 @@ val_batches = val_size // 32
 
 # Create the training dataset
 train_dataset = dataset.take(train_batches)
-
-for features, label in train_dataset.take(1):
-    print("Label column type:", label.dtype)
-    print("\nFeature columns and types:")
-    for name, tensor in features.items():
-        print(f"{name}: {tensor.dtype}")
 
 # Create the validation dataset by skipping the training set and taking the next part
 val_dataset = dataset.skip(train_batches).take(val_batches)

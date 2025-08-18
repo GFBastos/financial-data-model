@@ -5,6 +5,8 @@ Created on Wed Aug  6 18:44:50 2025
 @author: PC
 """
 
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_curve
 from sklearn.linear_model import LogisticRegression
 import tensorflow as tf
 from pathlib import Path
@@ -43,7 +45,13 @@ weights = class_weight.compute_class_weight(
 )
 
 class_weights = dict(zip(np.unique(Y_train), weights))
+unique, counts = np.unique(Y_train, return_counts=True)
+class_counts = dict(zip(unique, counts))
 
+# Display counts and ratio
+print("Class distribution:", class_counts)
+fraud_ratio = counts[1] / counts.sum()
+print(f"Fraud ratio: {fraud_ratio:.4%} (fraud cases in training data)")
 
 clf = LogisticRegression(max_iter=1000)
 clf.fit(X_train.numpy(), Y_train)
@@ -91,7 +99,7 @@ def build_model(hp):
       (`accuracy`, `Precision`, `Recall`, and `AUC`) for performance evaluation.
     """
     n_hidden = hp.Int("n_hidden", min_value=3, max_value=6, default=4)
-    n_neurons = hp.Int("n_neurons", min_value=128, max_value=1024, step=128)
+    n_neurons = hp.Int("n_neurons", min_value=32, max_value=256, step=128)
     learning_rate = hp.Float(
         "learning_rate",
         min_value=1e-4,
@@ -103,7 +111,7 @@ def build_model(hp):
         "sgd", "adamw", "momentum", "nesterov", "RMSProp"])
     match optimizer_name:
         case "sgd":
-            optimizer = tf.keras.optimizers.SGD(learning_rate=5e-4)
+            optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
         case "adamw":
             optimizer = AdamW(learning_rate=learning_rate)
         case "momentum":
@@ -120,38 +128,43 @@ def build_model(hp):
 
     model = tf.keras.Sequential()
     for _ in range(n_hidden):
-        model.add(tf.keras.layers.BatchNormalization())
         if (optimizer_name == "adamw"):
             model.add(tf.keras.layers.Dense(
                 n_neurons,
-                activation="relu",
                 kernel_initializer="he_normal"
             ))
         else:
             model.add(tf.keras.layers.Dense(
                 n_neurons,
-                activation="relu",
                 kernel_initializer="he_normal",
                 kernel_regularizer=tf.keras.regularizers.l2(1e-4)
             ))
-        # model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.BatchNormalization())
+        model.add(tf.keras.layers.Activation("relu"))
     model.add(tf.keras.layers.Dense(1, activation="sigmoid"))
     model.compile(
         loss="binary_crossentropy",
         optimizer=optimizer,
-        metrics=["accuracy", Precision(), Recall(), AUC()]
+        metrics=["accuracy", Precision(), Recall(), AUC(
+            curve="PR", name="auc_pr"), AUC(curve="ROC", name="auc_roc")]
     )
     return model
 
 
 random_search_tuner = kt.RandomSearch(
-    build_model, objective="val_auc", max_trials=5, overwrite=True,
-    directory="my_fashion_mnist", project_name="my_rnd_search", seed=42)
+    build_model,
+    objective=kt.Objective("val_auc_pr", direction="max"),
+    max_trials=5,
+    overwrite=True,
+    directory="my_fashion_mnist",
+    project_name="my_rnd_search",
+    seed=42
+)
 
 random_search_tuner.search(
     X_train, Y_train,
     validation_data=(X_val, Y_val),
-    epochs=10,
+    epochs=5,
     class_weight=class_weights
 )
 
