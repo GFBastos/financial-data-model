@@ -5,9 +5,6 @@ Created on Wed Aug  6 18:44:50 2025
 @author: PC
 """
 
-import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_curve
-from sklearn.linear_model import LogisticRegression
 import tensorflow as tf
 from pathlib import Path
 from time import strftime
@@ -200,3 +197,4 @@ history = fresh_best_model.fit(
 )
 
 fresh_best_model.save("best_model.keras")
+
